@@ -31,7 +31,8 @@ return [
             'strict' => true,
             'engine' => null,
             'options' => extension_loaded('pdo_mysql') ? array_filter([
-                \PDO\MySQL::ATTR_SSL_CA => env('MYSQL_ATTR_SSL_CA'),
+                // Use PDO::MYSQL_ATTR_SSL_CA for compatibility with PHP < 8.5
+                PDO::MYSQL_ATTR_SSL_CA => env('MYSQL_ATTR_SSL_CA'),
             ]) : [],
         ],
     ],
