@@ -6,6 +6,7 @@ use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Support\Facades\Storage;
 
 class Lesson extends Model
 {
@@ -23,6 +24,7 @@ class Lesson extends Model
         'content',
         'video_url',
         'video_type',
+        'video_path',
         'attachments',
         'duration_minutes',
         'order',
@@ -89,6 +91,10 @@ class Lesson extends Model
      */
     public function getEmbedUrlAttribute(): ?string
     {
+        if ($this->video_type === 'upload' && $this->video_path) {
+            return Storage::disk('public')->url($this->video_path);
+        }
+
         if (!$this->video_url) {
             return null;
         }
@@ -99,6 +105,17 @@ class Lesson extends Model
             'custom' => $this->video_url,
             default => null,
         };
+    }
+
+    /**
+     * Get the direct video URL for uploaded videos.
+     */
+    public function getVideoFileUrl(): ?string
+    {
+        if ($this->video_type === 'upload' && $this->video_path) {
+            return Storage::disk('public')->url($this->video_path);
+        }
+        return null;
     }
 
     /**
@@ -144,6 +161,9 @@ class Lesson extends Model
      */
     public function hasVideo(): bool
     {
+        if ($this->video_type === 'upload') {
+            return !empty($this->video_path);
+        }
         return !empty($this->video_url) && $this->video_type !== 'none';
     }
 
@@ -233,6 +253,7 @@ class Lesson extends Model
         return $query->where('is_free_preview', true);
     }
 }
+
 
 
 

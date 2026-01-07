@@ -1,7 +1,7 @@
 <x-admin-layout>
     <x-slot name="header">Add Lesson to {{ $module->title }}</x-slot>
 
-    <div class="max-w-3xl">
+    <div class="max-w-3xl" x-data="{ videoType: '{{ old('video_type', 'none') }}' }">
         <form method="POST" action="{{ route('admin.modules.lessons.store', $module) }}" enctype="multipart/form-data" class="space-y-6">
             @csrf
 
@@ -30,23 +30,42 @@
                         placeholder="Main content of the lesson (supports HTML)">{{ old('content') }}</textarea>
                 </div>
 
-                <div class="grid md:grid-cols-2 gap-6">
-                    <div>
-                        <label for="video_type" class="block text-sm font-medium text-slate-700 mb-2">Video Type</label>
-                        <select name="video_type" id="video_type"
-                            class="w-full px-4 py-2.5 rounded-lg border border-slate-300 focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/20">
-                            <option value="none" {{ old('video_type') === 'none' ? 'selected' : '' }}>No Video</option>
-                            <option value="youtube" {{ old('video_type') === 'youtube' ? 'selected' : '' }}>YouTube</option>
-                            <option value="vimeo" {{ old('video_type') === 'vimeo' ? 'selected' : '' }}>Vimeo</option>
-                            <option value="custom" {{ old('video_type') === 'custom' ? 'selected' : '' }}>Custom URL</option>
-                        </select>
-                    </div>
+                <!-- Video Section -->
+                <div class="border-t border-slate-200 pt-6">
+                    <h3 class="text-lg font-medium text-slate-900 mb-4">Video Content</h3>
+                    
+                    <div class="space-y-4">
+                        <div>
+                            <label for="video_type" class="block text-sm font-medium text-slate-700 mb-2">Video Type</label>
+                            <select name="video_type" id="video_type" x-model="videoType"
+                                class="w-full px-4 py-2.5 rounded-lg border border-slate-300 focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/20">
+                                <option value="none">No Video</option>
+                                <option value="upload">Upload Video File</option>
+                                <option value="youtube">YouTube URL</option>
+                                <option value="vimeo">Vimeo URL</option>
+                                <option value="custom">Custom Video URL</option>
+                            </select>
+                        </div>
 
-                    <div>
-                        <label for="video_url" class="block text-sm font-medium text-slate-700 mb-2">Video URL</label>
-                        <input type="url" name="video_url" id="video_url" value="{{ old('video_url') }}"
-                            class="w-full px-4 py-2.5 rounded-lg border border-slate-300 focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/20"
-                            placeholder="https://www.youtube.com/watch?v=...">
+                        <div x-show="videoType === 'upload'" x-cloak>
+                            <label for="video_file" class="block text-sm font-medium text-slate-700 mb-2">Upload Video File</label>
+                            <input type="file" name="video_file" id="video_file" accept="video/mp4,video/webm,video/ogg,video/mov"
+                                class="w-full px-4 py-2.5 rounded-lg border border-slate-300 focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/20">
+                            <p class="mt-1 text-xs text-slate-500">Max 500MB. Supported formats: MP4, WebM, OGG, MOV</p>
+                            @error('video_file')
+                                <p class="mt-1 text-sm text-red-600">{{ $message }}</p>
+                            @enderror
+                        </div>
+
+                        <div x-show="['youtube', 'vimeo', 'custom'].includes(videoType)" x-cloak>
+                            <label for="video_url" class="block text-sm font-medium text-slate-700 mb-2">Video URL</label>
+                            <input type="url" name="video_url" id="video_url" value="{{ old('video_url') }}"
+                                class="w-full px-4 py-2.5 rounded-lg border border-slate-300 focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/20"
+                                placeholder="https://www.youtube.com/watch?v=...">
+                            @error('video_url')
+                                <p class="mt-1 text-sm text-red-600">{{ $message }}</p>
+                            @enderror
+                        </div>
                     </div>
                 </div>
 

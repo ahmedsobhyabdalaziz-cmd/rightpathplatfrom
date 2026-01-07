@@ -41,7 +41,8 @@ class LessonController extends Controller
             'description' => 'nullable|string|max:500',
             'content' => 'nullable|string',
             'video_url' => 'nullable|url',
-            'video_type' => 'required|in:youtube,vimeo,custom,none',
+            'video_type' => 'required|in:youtube,vimeo,custom,upload,none',
+            'video_file' => 'nullable|file|mimes:mp4,webm,ogg,mov|max:500000',
             'duration_minutes' => 'nullable|integer|min:0',
             'is_free_preview' => 'boolean',
             'attachments.*' => 'nullable|file|max:10240',
@@ -51,6 +52,19 @@ class LessonController extends Controller
         $validated['order'] = $module->lessons()->max('order') + 1;
         $validated['is_free_preview'] = $request->boolean('is_free_preview');
         $validated['duration_minutes'] = $validated['duration_minutes'] ?? 0;
+
+        // Handle video upload
+        if ($request->hasFile('video_file')) {
+            $validated['video_path'] = $request->file('video_file')->store('lessons/videos', 'public');
+            $validated['video_type'] = 'upload';
+        } elseif ($validated['video_type'] !== 'upload') {
+            $validated['video_path'] = null;
+        }
+
+        // Clear video_url if using upload type
+        if ($validated['video_type'] === 'upload') {
+            $validated['video_url'] = null;
+        }
 
         // Handle attachments upload
         if ($request->hasFile('attachments')) {
@@ -103,7 +117,9 @@ class LessonController extends Controller
             'description' => 'nullable|string|max:500',
             'content' => 'nullable|string',
             'video_url' => 'nullable|url',
-            'video_type' => 'required|in:youtube,vimeo,custom,none',
+            'video_type' => 'required|in:youtube,vimeo,custom,upload,none',
+            'video_file' => 'nullable|file|mimes:mp4,webm,ogg,mov|max:500000',
+            'remove_video' => 'boolean',
             'duration_minutes' => 'nullable|integer|min:0',
             'is_free_preview' => 'boolean',
             'attachments.*' => 'nullable|file|max:10240',
@@ -112,6 +128,39 @@ class LessonController extends Controller
 
         $validated['is_free_preview'] = $request->boolean('is_free_preview');
         $validated['duration_minutes'] = $validated['duration_minutes'] ?? 0;
+
+        // Handle video removal
+        if ($request->boolean('remove_video') && $lesson->video_path) {
+            Storage::disk('public')->delete($lesson->video_path);
+            $validated['video_path'] = null;
+            $validated['video_type'] = 'none';
+            $validated['video_url'] = null;
+        }
+
+        // Handle new video upload
+        if ($request->hasFile('video_file')) {
+            // Delete old video if exists
+            if ($lesson->video_path) {
+                Storage::disk('public')->delete($lesson->video_path);
+            }
+            $validated['video_path'] = $request->file('video_file')->store('lessons/videos', 'public');
+            $validated['video_type'] = 'upload';
+            $validated['video_url'] = null;
+        } elseif ($validated['video_type'] !== 'upload' && !$request->boolean('remove_video')) {
+            // If switching from upload to another type, keep video_path as is unless explicitly removing
+            if ($validated['video_type'] !== 'none' && $lesson->video_type === 'upload') {
+                // Clear video_path when switching from upload to external URL
+                if ($lesson->video_path) {
+                    Storage::disk('public')->delete($lesson->video_path);
+                }
+                $validated['video_path'] = null;
+            }
+        }
+
+        // Clear video_url if using upload type
+        if ($validated['video_type'] === 'upload') {
+            $validated['video_url'] = null;
+        }
 
         // Handle attachment removal
         $currentAttachments = $lesson->attachments ?? [];
@@ -139,6 +188,7 @@ class LessonController extends Controller
 
         $validated['attachments'] = $currentAttachments;
         unset($validated['remove_attachments']);
+        unset($validated['remove_video']);
 
         $lesson->update($validated);
 
@@ -154,6 +204,11 @@ class LessonController extends Controller
     {
         $module = $lesson->module;
         $course = $module->course;
+
+        // Delete uploaded video
+        if ($lesson->video_path) {
+            Storage::disk('public')->delete($lesson->video_path);
+        }
 
         // Delete attachments
         if ($lesson->attachments) {
@@ -192,6 +247,7 @@ class LessonController extends Controller
         return response()->json(['success' => true]);
     }
 }
+
 
 
 
