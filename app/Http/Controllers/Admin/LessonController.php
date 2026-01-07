@@ -53,9 +53,10 @@ class LessonController extends Controller
         $validated['is_free_preview'] = $request->boolean('is_free_preview');
         $validated['duration_minutes'] = $validated['duration_minutes'] ?? 0;
 
-        // Handle video upload
+        // Handle video upload (store in private storage for protection)
         if ($request->hasFile('video_file')) {
-            $validated['video_path'] = $request->file('video_file')->store('lessons/videos', 'public');
+            $storageDisk = config('video.storage_disk', 'local');
+            $validated['video_path'] = $request->file('video_file')->store('videos/lessons', $storageDisk);
             $validated['video_type'] = 'upload';
         } elseif ($validated['video_type'] !== 'upload') {
             $validated['video_path'] = null;
@@ -129,21 +130,23 @@ class LessonController extends Controller
         $validated['is_free_preview'] = $request->boolean('is_free_preview');
         $validated['duration_minutes'] = $validated['duration_minutes'] ?? 0;
 
+        $storageDisk = config('video.storage_disk', 'local');
+
         // Handle video removal
         if ($request->boolean('remove_video') && $lesson->video_path) {
-            Storage::disk('public')->delete($lesson->video_path);
+            Storage::disk($storageDisk)->delete($lesson->video_path);
             $validated['video_path'] = null;
             $validated['video_type'] = 'none';
             $validated['video_url'] = null;
         }
 
-        // Handle new video upload
+        // Handle new video upload (store in private storage for protection)
         if ($request->hasFile('video_file')) {
             // Delete old video if exists
             if ($lesson->video_path) {
-                Storage::disk('public')->delete($lesson->video_path);
+                Storage::disk($storageDisk)->delete($lesson->video_path);
             }
-            $validated['video_path'] = $request->file('video_file')->store('lessons/videos', 'public');
+            $validated['video_path'] = $request->file('video_file')->store('videos/lessons', $storageDisk);
             $validated['video_type'] = 'upload';
             $validated['video_url'] = null;
         } elseif ($validated['video_type'] !== 'upload' && !$request->boolean('remove_video')) {
@@ -151,7 +154,7 @@ class LessonController extends Controller
             if ($validated['video_type'] !== 'none' && $lesson->video_type === 'upload') {
                 // Clear video_path when switching from upload to external URL
                 if ($lesson->video_path) {
-                    Storage::disk('public')->delete($lesson->video_path);
+                    Storage::disk($storageDisk)->delete($lesson->video_path);
                 }
                 $validated['video_path'] = null;
             }
@@ -204,10 +207,11 @@ class LessonController extends Controller
     {
         $module = $lesson->module;
         $course = $module->course;
+        $storageDisk = config('video.storage_disk', 'local');
 
-        // Delete uploaded video
+        // Delete uploaded video from private storage
         if ($lesson->video_path) {
-            Storage::disk('public')->delete($lesson->video_path);
+            Storage::disk($storageDisk)->delete($lesson->video_path);
         }
 
         // Delete attachments

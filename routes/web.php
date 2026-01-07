@@ -15,6 +15,7 @@ use App\Http\Controllers\Auth\RegisteredUserController;
 use App\Http\Controllers\Auth\PasswordResetLinkController;
 use App\Http\Controllers\Auth\NewPasswordController;
 use App\Http\Controllers\ProfileController;
+use App\Http\Controllers\VideoStreamController;
 
 /*
 |--------------------------------------------------------------------------
@@ -94,6 +95,11 @@ Route::middleware('auth')->group(function () {
 
 // Certificate verification (public)
 Route::get('/verify/{certificate_number}', [CertificateController::class, 'verify'])->name('certificates.verify');
+
+// Protected video streaming (signed URLs)
+Route::get('/video/stream/{type}/{id}', [VideoStreamController::class, 'stream'])
+    ->name('video.stream')
+    ->middleware(['auth', 'signed']);
 
 
 

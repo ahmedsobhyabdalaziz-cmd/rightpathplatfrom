@@ -51,9 +51,10 @@ class ModuleController extends Controller
         $validated['drip_days'] = $validated['drip_days'] ?? 0;
         $validated['video_duration_minutes'] = $validated['video_duration_minutes'] ?? 0;
 
-        // Handle video upload
+        // Handle video upload (store in private storage for protection)
         if ($request->hasFile('video_file') && $validated['video_type'] === 'upload') {
-            $validated['video_path'] = $request->file('video_file')->store('modules/videos', 'public');
+            $storageDisk = config('video.storage_disk', 'local');
+            $validated['video_path'] = $request->file('video_file')->store('videos/modules', $storageDisk);
         }
 
         // Don't store file in database
@@ -104,20 +105,21 @@ class ModuleController extends Controller
 
         $validated['drip_days'] = $validated['drip_days'] ?? 0;
         $validated['video_duration_minutes'] = $validated['video_duration_minutes'] ?? 0;
+        $storageDisk = config('video.storage_disk', 'local');
 
         // Handle video removal
         if ($request->boolean('remove_video') && $module->video_path) {
-            Storage::disk('public')->delete($module->video_path);
+            Storage::disk($storageDisk)->delete($module->video_path);
             $validated['video_path'] = null;
         }
 
-        // Handle new video upload
+        // Handle new video upload (store in private storage for protection)
         if ($request->hasFile('video_file') && $validated['video_type'] === 'upload') {
             // Delete old video if exists
             if ($module->video_path) {
-                Storage::disk('public')->delete($module->video_path);
+                Storage::disk($storageDisk)->delete($module->video_path);
             }
-            $validated['video_path'] = $request->file('video_file')->store('modules/videos', 'public');
+            $validated['video_path'] = $request->file('video_file')->store('videos/modules', $storageDisk);
         }
 
         // Clear video URL if type changed to upload or none
@@ -128,7 +130,7 @@ class ModuleController extends Controller
         // Clear video path if type changed to external
         if (in_array($validated['video_type'], ['youtube', 'vimeo', 'custom'])) {
             if ($module->video_path) {
-                Storage::disk('public')->delete($module->video_path);
+                Storage::disk($storageDisk)->delete($module->video_path);
             }
             $validated['video_path'] = null;
         }
@@ -149,10 +151,11 @@ class ModuleController extends Controller
     public function destroy(Module $module): RedirectResponse
     {
         $course = $module->course;
+        $storageDisk = config('video.storage_disk', 'local');
 
-        // Delete video file if exists
+        // Delete video file if exists from private storage
         if ($module->video_path) {
-            Storage::disk('public')->delete($module->video_path);
+            Storage::disk($storageDisk)->delete($module->video_path);
         }
 
         $module->delete();

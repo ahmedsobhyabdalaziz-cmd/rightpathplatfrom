@@ -7,6 +7,7 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Support\Facades\Storage;
+use Illuminate\Support\Facades\URL;
 
 class Lesson extends Model
 {
@@ -109,6 +110,7 @@ class Lesson extends Model
 
     /**
      * Get the direct video URL for uploaded videos.
+     * @deprecated Use getSecureVideoUrl() for protected video access
      */
     public function getVideoFileUrl(): ?string
     {
@@ -116,6 +118,33 @@ class Lesson extends Model
             return Storage::disk('public')->url($this->video_path);
         }
         return null;
+    }
+
+    /**
+     * Get a secure, signed URL for the uploaded video.
+     * The URL expires after the configured time (default 15 minutes).
+     */
+    public function getSecureVideoUrl(): ?string
+    {
+        if ($this->video_type !== 'upload' || !$this->video_path) {
+            return null;
+        }
+
+        $expiryMinutes = config('video.url_expiry_minutes', 15);
+
+        return URL::temporarySignedRoute(
+            'video.stream',
+            now()->addMinutes($expiryMinutes),
+            ['type' => 'lesson', 'id' => $this->id]
+        );
+    }
+
+    /**
+     * Check if this lesson has an uploaded (protected) video.
+     */
+    public function hasUploadedVideo(): bool
+    {
+        return $this->video_type === 'upload' && !empty($this->video_path);
     }
 
     /**

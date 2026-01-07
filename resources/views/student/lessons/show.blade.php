@@ -78,14 +78,33 @@
         <main class="flex-1 lg:h-screen lg:overflow-y-auto">
             <!-- Video Section -->
             @if($lesson->hasVideo())
-            <div class="aspect-video bg-black">
-                <iframe 
-                    src="{{ $lesson->embed_url }}" 
-                    class="w-full h-full" 
-                    frameborder="0" 
-                    allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" 
-                    allowfullscreen>
-                </iframe>
+            <div class="aspect-video bg-black relative" id="video-container">
+                @if($lesson->hasUploadedVideo())
+                    {{-- Protected video player for uploaded videos --}}
+                    <video 
+                        id="protected-video"
+                        class="w-full h-full"
+                        controls
+                        controlsList="nodownload noplaybackrate"
+                        disablePictureInPicture
+                        oncontextmenu="return false;"
+                        playsinline
+                    >
+                        <source src="{{ $lesson->getSecureVideoUrl() }}" type="video/mp4">
+                        Your browser does not support the video tag.
+                    </video>
+                    {{-- Overlay to prevent right-click inspection --}}
+                    <div id="video-overlay" class="absolute inset-0 pointer-events-none"></div>
+                @else
+                    {{-- External video (YouTube, Vimeo, etc.) --}}
+                    <iframe 
+                        src="{{ $lesson->embed_url }}" 
+                        class="w-full h-full" 
+                        frameborder="0" 
+                        allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" 
+                        allowfullscreen>
+                    </iframe>
+                @endif
             </div>
             @endif
 
@@ -192,6 +211,71 @@
             </div>
         </main>
     </div>
+
+    @if($lesson->hasUploadedVideo())
+    {{-- Video Protection Scripts --}}
+    <style>
+        /* Hide download button in video controls */
+        video::-webkit-media-controls-download-button {
+            display: none !important;
+        }
+        video::-webkit-media-controls-enclosure {
+            overflow: hidden !important;
+        }
+        video::-webkit-media-controls-panel {
+            width: calc(100% + 30px) !important;
+        }
+        /* Prevent text selection on video */
+        #video-container {
+            user-select: none;
+            -webkit-user-select: none;
+            -moz-user-select: none;
+            -ms-user-select: none;
+        }
+    </style>
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            const video = document.getElementById('protected-video');
+            const container = document.getElementById('video-container');
+            
+            if (video) {
+                // Disable right-click on video
+                video.addEventListener('contextmenu', function(e) {
+                    e.preventDefault();
+                    return false;
+                });
+
+                // Disable keyboard shortcuts
+                document.addEventListener('keydown', function(e) {
+                    // Disable Ctrl+S, Ctrl+Shift+S
+                    if ((e.ctrlKey || e.metaKey) && (e.key === 's' || e.key === 'S')) {
+                        e.preventDefault();
+                        return false;
+                    }
+                    // Disable F12 (dev tools)
+                    if (e.key === 'F12') {
+                        e.preventDefault();
+                        return false;
+                    }
+                });
+
+                // Disable drag
+                video.addEventListener('dragstart', function(e) {
+                    e.preventDefault();
+                    return false;
+                });
+            }
+
+            // Disable right-click on container
+            if (container) {
+                container.addEventListener('contextmenu', function(e) {
+                    e.preventDefault();
+                    return false;
+                });
+            }
+        });
+    </script>
+    @endif
 </x-app-layout>
 
 

@@ -6,6 +6,7 @@ use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Support\Facades\URL;
 
 class Module extends Model
 {
@@ -51,7 +52,35 @@ class Module extends Model
     }
 
     /**
+     * Check if this module has an uploaded (protected) video.
+     */
+    public function hasUploadedVideo(): bool
+    {
+        return $this->video_type === 'upload' && !empty($this->video_path);
+    }
+
+    /**
+     * Get a secure, signed URL for the uploaded video.
+     * The URL expires after the configured time (default 15 minutes).
+     */
+    public function getSecureVideoUrl(): ?string
+    {
+        if ($this->video_type !== 'upload' || !$this->video_path) {
+            return null;
+        }
+
+        $expiryMinutes = config('video.url_expiry_minutes', 15);
+
+        return URL::temporarySignedRoute(
+            'video.stream',
+            now()->addMinutes($expiryMinutes),
+            ['type' => 'module', 'id' => $this->id]
+        );
+    }
+
+    /**
      * Get video URL for display.
+     * @deprecated Use getSecureVideoUrl() for protected video access
      */
     public function getVideoDisplayUrlAttribute(): ?string
     {
