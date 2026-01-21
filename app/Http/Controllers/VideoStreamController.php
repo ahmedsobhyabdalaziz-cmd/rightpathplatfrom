@@ -6,6 +6,7 @@ use App\Models\Lesson;
 use App\Models\Module;
 use App\Models\VideoEncryptionKey;
 use App\Services\HlsService;
+use App\Services\VideoTokenService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Facades\URL;
@@ -156,7 +157,7 @@ class VideoStreamController extends Controller
     /**
      * Serve the HLS master playlist with injected key URLs.
      */
-    public function playlist(Request $request, string $type, int $id, HlsService $hlsService)
+    public function playlist(Request $request, string $type, int $id, HlsService $hlsService, VideoTokenService $tokenService)
     {
         // Validate type
         if (!in_array($type, ['lesson', 'module'])) {
@@ -176,11 +177,14 @@ class VideoStreamController extends Controller
             abort(403, 'You must be enrolled in this course to view this video.');
         }
 
-        // Generate key URL (authentication-based)
-        $keyUrl = route('video.key', ['type' => $type, 'id' => $id]);
+        // Get the token from the current request
+        $token = $request->query('token');
 
-        // Get playlist content with key URL injected
-        $playlistContent = $hlsService->getPlaylistWithKeyUrl($model->hls_path, $keyUrl);
+        // Generate key URL with same token
+        $keyUrl = route('video.key', ['type' => $type, 'id' => $id, 'token' => $token]);
+
+        // Get playlist content with key URL and token injected into segments
+        $playlistContent = $hlsService->getPlaylistWithKeyUrl($model->hls_path, $keyUrl, $token);
 
         return response($playlistContent, 200, [
             'Content-Type' => 'application/vnd.apple.mpegurl',

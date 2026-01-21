@@ -96,23 +96,23 @@ Route::middleware('auth')->group(function () {
 // Certificate verification (public)
 Route::get('/verify/{certificate_number}', [CertificateController::class, 'verify'])->name('certificates.verify');
 
-// Protected video streaming (signed URLs)
+// Protected video streaming (token-based authentication)
 Route::get('/video/stream/{type}/{id}', [VideoStreamController::class, 'stream'])
     ->name('video.stream')
-    ->middleware(['auth', 'signed']);
+    ->middleware(['auth', 'video.token']);
 
-// HLS video streaming
+// HLS video streaming (token-based authentication)
 Route::get('/video/hls/{type}/{id}/playlist.m3u8', [VideoStreamController::class, 'playlist'])
     ->name('video.playlist')
-    ->middleware(['auth']);
+    ->middleware(['auth', 'video.token']);
 
 Route::get('/video/hls/{type}/{id}/key', [VideoStreamController::class, 'keyDelivery'])
     ->name('video.key')
-    ->middleware(['auth']);
+    ->middleware(['auth', 'video.token']);
 
 Route::get('/video/hls/{type}/{id}/{segment}', [VideoStreamController::class, 'segment'])
     ->name('video.segment')
-    ->middleware(['auth']);
+    ->middleware(['auth', 'video.token']);
 
 
 

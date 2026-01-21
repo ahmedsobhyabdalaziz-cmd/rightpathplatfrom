@@ -7,6 +7,7 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Support\Facades\URL;
+use App\Services\VideoTokenService;
 
 class Module extends Model
 {
@@ -69,17 +70,30 @@ class Module extends Model
      */
     public function getSecureVideoUrl(): ?string
     {
-        if ($this->video_type !== 'upload' || !$this->video_path) {
+        if (!auth()->check()) {
             return null;
         }
 
-        $expiryMinutes = config('video.url_expiry_minutes', 15);
+        $tokenService = app(VideoTokenService::class);
 
-        return URL::temporarySignedRoute(
-            'video.stream',
-            now()->addMinutes($expiryMinutes),
-            ['type' => 'module', 'id' => $this->id]
-        );
+        if ($this->video_type === 'upload' && $this->hls_path) {
+            // For HLS, return the URL to the master playlist with token
+            return $tokenService->generateUrl(
+                'video.playlist',
+                'module',
+                $this->id,
+                auth()->id()
+            );
+        } elseif ($this->video_type === 'upload' && $this->video_path) {
+            // Fallback for direct streaming if HLS not ready or failed
+            return $tokenService->generateUrl(
+                'video.stream',
+                'module',
+                $this->id,
+                auth()->id()
+            );
+        }
+        return null;
     }
 
     /**

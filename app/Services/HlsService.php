@@ -153,13 +153,25 @@ class HlsService
     /**
      * Get the m3u8 playlist content with actual key URL injected.
      */
-    public function getPlaylistWithKeyUrl(string $hlsPath, string $keyUrl): string
+    public function getPlaylistWithKeyUrl(string $hlsPath, string $keyUrl, ?string $token = null): string
     {
         $disk = Storage::disk(config('video.storage_disk', 'local'));
         $content = $disk->get($hlsPath);
         
-        // Replace placeholder with actual signed key URL
+        // Replace placeholder with actual key URL
         $content = str_replace('__KEY_URL_PLACEHOLDER__', $keyUrl, $content);
+        
+        // If token provided, inject it into segment URLs
+        if ($token) {
+            // Find all .ts segment references and add token parameter
+            $content = preg_replace_callback(
+                '/^(segment_\d+\.ts)$/m',
+                function($matches) use ($token) {
+                    return $matches[1] . '?token=' . $token;
+                },
+                $content
+            );
+        }
         
         return $content;
     }
