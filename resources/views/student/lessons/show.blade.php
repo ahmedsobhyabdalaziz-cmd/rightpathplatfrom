@@ -109,22 +109,19 @@
                             {{ auth()->user()->name }}<br>{{ auth()->user()->email }}
                         </div>
                     @else
-                        {{-- Fallback to direct stream if HLS not available yet --}}
-                        <video 
-                            id="protected-video"
-                            class="w-full h-full"
-                            controls
-                            controlsList="nodownload noplaybackrate"
-                            disablePictureInPicture
-                            oncontextmenu="return false;"
-                            playsinline
-                        >
-                            <source src="{{ $lesson->getSecureVideoUrl() }}" type="video/mp4">
-                            Your browser does not support the video tag.
-                        </video>
-                        {{-- Watermark overlay --}}
-                        <div id="watermark" class="absolute pointer-events-none select-none" style="color: rgba(255,255,255,0.7); text-shadow: 2px 2px 4px rgba(0,0,0,0.8); font-size: 14px; font-weight: 600; z-index: 10;">
-                            {{ auth()->user()->name }}<br>{{ auth()->user()->email }}
+                        {{-- Video queued for processing --}}
+                        <div class="w-full h-full flex items-center justify-center text-white">
+                            <div class="text-center">
+                                <svg class="w-16 h-16 mx-auto mb-4 text-yellow-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                                </svg>
+                                <p class="text-lg">Video Processing Queued</p>
+                                <p class="text-sm text-slate-400 mt-2">The video has been uploaded and will be processed shortly.</p>
+                                <p class="text-sm text-slate-400">Please check back in a few minutes.</p>
+                                <button onclick="location.reload()" class="mt-4 px-4 py-2 bg-emerald-600 hover:bg-emerald-700 rounded-lg transition">
+                                    Refresh Page
+                                </button>
+                            </div>
                         </div>
                     @endif
                 @else
@@ -285,44 +282,60 @@
             // Initialize HLS.js player
             if (video && Hls.isSupported()) {
                 const hls = new Hls({
+                    debug: false,
                     xhrSetup: function(xhr, url) {
-                        // Ensure credentials are sent with requests
                         xhr.withCredentials = false;
                     }
                 });
                 
                 const playlistUrl = '{{ URL::temporarySignedRoute("video.playlist", now()->addMinutes(15), ["type" => "lesson", "id" => $lesson->id]) }}';
+                console.log('Loading HLS playlist:', playlistUrl);
+                
                 hls.loadSource(playlistUrl);
                 hls.attachMedia(video);
                 
                 hls.on(Hls.Events.MANIFEST_PARSED, function() {
-                    // Video is ready to play
-                    console.log('HLS stream loaded');
+                    console.log('HLS stream loaded successfully');
                 });
                 
                 hls.on(Hls.Events.ERROR, function(event, data) {
+                    console.error('HLS Error:', data);
+                    
                     if (data.fatal) {
-                        console.error('Fatal HLS error:', data);
                         switch(data.type) {
                             case Hls.ErrorTypes.NETWORK_ERROR:
-                                console.log('Network error, trying to recover...');
-                                hls.startLoad();
+                                console.log('Network error, attempting recovery...');
+                                setTimeout(() => hls.startLoad(), 1000);
                                 break;
                             case Hls.ErrorTypes.MEDIA_ERROR:
-                                console.log('Media error, trying to recover...');
+                                console.log('Media error, attempting recovery...');
                                 hls.recoverMediaError();
                                 break;
                             default:
-                                console.log('Unrecoverable error');
+                                console.error('Unrecoverable error:', data);
                                 hls.destroy();
+                                // Show error message
+                                const errorMsg = document.createElement('div');
+                                errorMsg.className = 'absolute inset-0 flex items-center justify-center bg-black/80 text-white';
+                                errorMsg.innerHTML = '<div class="text-center"><p class="text-lg mb-2">Unable to load video</p><p class="text-sm">Please refresh the page or contact support</p></div>';
+                                container.appendChild(errorMsg);
                                 break;
                         }
                     }
                 });
+                
+                hls.on(Hls.Events.LEVEL_LOADED, function(event, data) {
+                    console.log('Level loaded:', data);
+                });
             } else if (video && video.canPlayType('application/vnd.apple.mpegurl')) {
                 // Native HLS support (Safari)
                 const playlistUrl = '{{ URL::temporarySignedRoute("video.playlist", now()->addMinutes(15), ["type" => "lesson", "id" => $lesson->id]) }}';
+                console.log('Using native HLS support');
                 video.src = playlistUrl;
+                
+                video.addEventListener('error', function(e) {
+                    console.error('Video error:', e);
+                });
             }
             @endif
             
