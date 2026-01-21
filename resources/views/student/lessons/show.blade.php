@@ -80,21 +80,53 @@
             @if($lesson->hasVideo())
             <div class="aspect-video bg-black relative" id="video-container">
                 @if($lesson->hasUploadedVideo())
-                    {{-- Protected video player for uploaded videos --}}
-                    <video 
-                        id="protected-video"
-                        class="w-full h-full"
-                        controls
-                        controlsList="nodownload noplaybackrate"
-                        disablePictureInPicture
-                        oncontextmenu="return false;"
-                        playsinline
-                    >
-                        <source src="{{ $lesson->getSecureVideoUrl() }}" type="video/mp4">
-                        Your browser does not support the video tag.
-                    </video>
-                    {{-- Overlay to prevent right-click inspection --}}
-                    <div id="video-overlay" class="absolute inset-0 pointer-events-none"></div>
+                    {{-- Protected HLS video player for uploaded videos --}}
+                    @if($lesson->hls_processing)
+                        {{-- Show processing message --}}
+                        <div class="w-full h-full flex items-center justify-center text-white">
+                            <div class="text-center">
+                                <svg class="animate-spin h-12 w-12 mx-auto mb-4" viewBox="0 0 24 24">
+                                    <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4" fill="none"></circle>
+                                    <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                                </svg>
+                                <p class="text-lg">Processing video...</p>
+                                <p class="text-sm text-slate-400 mt-2">This may take a few minutes. Please refresh the page shortly.</p>
+                            </div>
+                        </div>
+                    @elseif($lesson->hls_path)
+                        {{-- HLS Player --}}
+                        <video 
+                            id="protected-video"
+                            class="w-full h-full"
+                            controls
+                            controlsList="nodownload noplaybackrate"
+                            disablePictureInPicture
+                            oncontextmenu="return false;"
+                            playsinline
+                        ></video>
+                        {{-- Watermark overlay --}}
+                        <div id="watermark" class="absolute pointer-events-none select-none" style="color: rgba(255,255,255,0.7); text-shadow: 2px 2px 4px rgba(0,0,0,0.8); font-size: 14px; font-weight: 600; z-index: 10;">
+                            {{ auth()->user()->name }}<br>{{ auth()->user()->email }}
+                        </div>
+                    @else
+                        {{-- Fallback to direct stream if HLS not available yet --}}
+                        <video 
+                            id="protected-video"
+                            class="w-full h-full"
+                            controls
+                            controlsList="nodownload noplaybackrate"
+                            disablePictureInPicture
+                            oncontextmenu="return false;"
+                            playsinline
+                        >
+                            <source src="{{ $lesson->getSecureVideoUrl() }}" type="video/mp4">
+                            Your browser does not support the video tag.
+                        </video>
+                        {{-- Watermark overlay --}}
+                        <div id="watermark" class="absolute pointer-events-none select-none" style="color: rgba(255,255,255,0.7); text-shadow: 2px 2px 4px rgba(0,0,0,0.8); font-size: 14px; font-weight: 600; z-index: 10;">
+                            {{ auth()->user()->name }}<br>{{ auth()->user()->email }}
+                        </div>
+                    @endif
                 @else
                     {{-- External video (YouTube, Vimeo, etc.) --}}
                     <iframe 
@@ -212,7 +244,7 @@
         </main>
     </div>
 
-    @if($lesson->hasUploadedVideo())
+    @if($lesson->hasUploadedVideo() && !$lesson->hls_processing)
     {{-- Video Protection Scripts --}}
     <style>
         /* Hide download button in video controls */
@@ -232,11 +264,67 @@
             -moz-user-select: none;
             -ms-user-select: none;
         }
+        /* Watermark positioning */
+        #watermark {
+            transition: all 0.3s ease;
+        }
     </style>
+
+    @if($lesson->hls_path)
+    {{-- HLS.js library --}}
+    <script src="https://cdn.jsdelivr.net/npm/hls.js@latest"></script>
+    @endif
+
     <script>
         document.addEventListener('DOMContentLoaded', function() {
             const video = document.getElementById('protected-video');
             const container = document.getElementById('video-container');
+            const watermark = document.getElementById('watermark');
+            
+            @if($lesson->hls_path)
+            // Initialize HLS.js player
+            if (video && Hls.isSupported()) {
+                const hls = new Hls({
+                    xhrSetup: function(xhr, url) {
+                        // Ensure credentials are sent with requests
+                        xhr.withCredentials = false;
+                    }
+                });
+                
+                const playlistUrl = '{{ URL::temporarySignedRoute("video.playlist", now()->addMinutes(15), ["type" => "lesson", "id" => $lesson->id]) }}';
+                hls.loadSource(playlistUrl);
+                hls.attachMedia(video);
+                
+                hls.on(Hls.Events.MANIFEST_PARSED, function() {
+                    // Video is ready to play
+                    console.log('HLS stream loaded');
+                });
+                
+                hls.on(Hls.Events.ERROR, function(event, data) {
+                    if (data.fatal) {
+                        console.error('Fatal HLS error:', data);
+                        switch(data.type) {
+                            case Hls.ErrorTypes.NETWORK_ERROR:
+                                console.log('Network error, trying to recover...');
+                                hls.startLoad();
+                                break;
+                            case Hls.ErrorTypes.MEDIA_ERROR:
+                                console.log('Media error, trying to recover...');
+                                hls.recoverMediaError();
+                                break;
+                            default:
+                                console.log('Unrecoverable error');
+                                hls.destroy();
+                                break;
+                        }
+                    }
+                });
+            } else if (video && video.canPlayType('application/vnd.apple.mpegurl')) {
+                // Native HLS support (Safari)
+                const playlistUrl = '{{ URL::temporarySignedRoute("video.playlist", now()->addMinutes(15), ["type" => "lesson", "id" => $lesson->id]) }}';
+                video.src = playlistUrl;
+            }
+            @endif
             
             if (video) {
                 // Disable right-click on video
@@ -272,6 +360,36 @@
                     e.preventDefault();
                     return false;
                 });
+            }
+
+            // Dynamic watermark positioning
+            if (watermark) {
+                const positions = [
+                    { top: '20px', left: '20px', right: 'auto', bottom: 'auto' },
+                    { top: '20px', right: '20px', left: 'auto', bottom: 'auto' },
+                    { bottom: '60px', left: '20px', top: 'auto', right: 'auto' },
+                    { bottom: '60px', right: '20px', top: 'auto', left: 'auto' },
+                    { top: '50%', left: '50%', right: 'auto', bottom: 'auto', transform: 'translate(-50%, -50%)' }
+                ];
+                
+                let currentPosition = 0;
+                
+                function moveWatermark() {
+                    currentPosition = (currentPosition + 1) % positions.length;
+                    const pos = positions[currentPosition];
+                    
+                    watermark.style.top = pos.top;
+                    watermark.style.left = pos.left;
+                    watermark.style.right = pos.right;
+                    watermark.style.bottom = pos.bottom;
+                    watermark.style.transform = pos.transform || 'none';
+                }
+                
+                // Initial position
+                moveWatermark();
+                
+                // Move every 30 seconds
+                setInterval(moveWatermark, 30000);
             }
         });
     </script>

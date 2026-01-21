@@ -24,6 +24,9 @@ class Module extends Model
         'video_path',
         'video_type',
         'video_url',
+        'hls_path',
+        'hls_key_id',
+        'hls_processing',
         'video_duration_minutes',
         'order',
         'drip_days',
@@ -40,6 +43,7 @@ class Module extends Model
             'order' => 'integer',
             'drip_days' => 'integer',
             'video_duration_minutes' => 'integer',
+            'hls_processing' => 'boolean',
         ];
     }
 

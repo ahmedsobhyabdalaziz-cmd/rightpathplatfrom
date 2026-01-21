@@ -12,10 +12,9 @@ return new class extends Migration
     public function up(): void
     {
         Schema::table('modules', function (Blueprint $table) {
-            $table->string('video_path')->nullable()->after('description');
-            $table->string('video_type')->default('none')->after('video_path'); // none, upload, youtube, vimeo, custom
-            $table->string('video_url')->nullable()->after('video_type');
-            $table->integer('video_duration_minutes')->default(0)->after('video_url');
+            $table->string('hls_path')->nullable()->after('video_path');
+            $table->foreignId('hls_key_id')->nullable()->after('hls_path')->constrained('video_encryption_keys')->nullOnDelete();
+            $table->boolean('hls_processing')->default(false)->after('hls_key_id');
         });
     }
 
@@ -25,11 +24,8 @@ return new class extends Migration
     public function down(): void
     {
         Schema::table('modules', function (Blueprint $table) {
-            $table->dropColumn(['video_path', 'video_type', 'video_url', 'video_duration_minutes']);
+            $table->dropForeign(['hls_key_id']);
+            $table->dropColumn(['hls_path', 'hls_key_id', 'hls_processing']);
         });
     }
 };
-
-
-
-

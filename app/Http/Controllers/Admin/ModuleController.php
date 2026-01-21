@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Admin;
 use App\Http\Controllers\Controller;
 use App\Models\Course;
 use App\Models\Module;
+use App\Jobs\ConvertToHls;
 use Illuminate\Http\Request;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\JsonResponse;
@@ -52,19 +53,26 @@ class ModuleController extends Controller
         $validated['video_duration_minutes'] = $validated['video_duration_minutes'] ?? 0;
 
         // Handle video upload (store in private storage for protection)
+        $videoPath = null;
         if ($request->hasFile('video_file') && $validated['video_type'] === 'upload') {
             $storageDisk = config('video.storage_disk', 'local');
-            $validated['video_path'] = $request->file('video_file')->store('videos/modules', $storageDisk);
+            $videoPath = $request->file('video_file')->store('videos/modules', $storageDisk);
+            $validated['video_path'] = $videoPath;
         }
 
         // Don't store file in database
         unset($validated['video_file']);
 
-        $course->modules()->create($validated);
+        $module = $course->modules()->create($validated);
+
+        // Dispatch HLS conversion job for uploaded videos
+        if ($videoPath) {
+            ConvertToHls::dispatch('module', $module->id, $videoPath);
+        }
 
         return redirect()
             ->route('admin.courses.show', $course)
-            ->with('success', 'Module created successfully.');
+            ->with('success', 'Module created successfully.' . ($videoPath ? ' Video conversion to HLS format will begin shortly.' : ''));
     }
 
     /**
@@ -106,20 +114,33 @@ class ModuleController extends Controller
         $validated['drip_days'] = $validated['drip_days'] ?? 0;
         $validated['video_duration_minutes'] = $validated['video_duration_minutes'] ?? 0;
         $storageDisk = config('video.storage_disk', 'local');
+        $newVideoPath = null;
 
         // Handle video removal
         if ($request->boolean('remove_video') && $module->video_path) {
             Storage::disk($storageDisk)->delete($module->video_path);
+            if ($module->hls_path) {
+                app(\App\Services\HlsService::class)->deleteHls($module->hls_path);
+            }
             $validated['video_path'] = null;
+            $validated['hls_path'] = null;
+            $validated['hls_key_id'] = null;
         }
 
         // Handle new video upload (store in private storage for protection)
         if ($request->hasFile('video_file') && $validated['video_type'] === 'upload') {
-            // Delete old video if exists
+            // Delete old video and HLS files if exists
             if ($module->video_path) {
                 Storage::disk($storageDisk)->delete($module->video_path);
             }
-            $validated['video_path'] = $request->file('video_file')->store('videos/modules', $storageDisk);
+            if ($module->hls_path) {
+                app(\App\Services\HlsService::class)->deleteHls($module->hls_path);
+            }
+            
+            $newVideoPath = $request->file('video_file')->store('videos/modules', $storageDisk);
+            $validated['video_path'] = $newVideoPath;
+            $validated['hls_path'] = null;
+            $validated['hls_key_id'] = null;
         }
 
         // Clear video URL if type changed to upload or none
@@ -132,7 +153,12 @@ class ModuleController extends Controller
             if ($module->video_path) {
                 Storage::disk($storageDisk)->delete($module->video_path);
             }
+            if ($module->hls_path) {
+                app(\App\Services\HlsService::class)->deleteHls($module->hls_path);
+            }
             $validated['video_path'] = null;
+            $validated['hls_path'] = null;
+            $validated['hls_key_id'] = null;
         }
 
         // Don't store file in database
@@ -140,9 +166,14 @@ class ModuleController extends Controller
 
         $module->update($validated);
 
+        // Dispatch HLS conversion job for newly uploaded videos
+        if ($newVideoPath) {
+            ConvertToHls::dispatch('module', $module->id, $newVideoPath);
+        }
+
         return redirect()
             ->route('admin.courses.show', $module->course)
-            ->with('success', 'Module updated successfully.');
+            ->with('success', 'Module updated successfully.' . ($newVideoPath ? ' Video conversion to HLS format will begin shortly.' : ''));
     }
 
     /**

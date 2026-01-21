@@ -12,7 +12,9 @@ return new class extends Migration
     public function up(): void
     {
         Schema::table('lessons', function (Blueprint $table) {
-            $table->string('video_path')->nullable()->after('video_url');
+            $table->string('hls_path')->nullable()->after('video_path');
+            $table->foreignId('hls_key_id')->nullable()->after('hls_path')->constrained('video_encryption_keys')->nullOnDelete();
+            $table->boolean('hls_processing')->default(false)->after('hls_key_id');
         });
     }
 
@@ -22,9 +24,8 @@ return new class extends Migration
     public function down(): void
     {
         Schema::table('lessons', function (Blueprint $table) {
-            $table->dropColumn('video_path');
+            $table->dropForeign(['hls_key_id']);
+            $table->dropColumn(['hls_path', 'hls_key_id', 'hls_processing']);
         });
     }
 };
-
-

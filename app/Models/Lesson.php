@@ -26,6 +26,9 @@ class Lesson extends Model
         'video_url',
         'video_type',
         'video_path',
+        'hls_path',
+        'hls_key_id',
+        'hls_processing',
         'attachments',
         'duration_minutes',
         'order',
@@ -44,6 +47,7 @@ class Lesson extends Model
             'order' => 'integer',
             'duration_minutes' => 'integer',
             'is_free_preview' => 'boolean',
+            'hls_processing' => 'boolean',
         ];
     }
 

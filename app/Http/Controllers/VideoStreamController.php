@@ -4,8 +4,11 @@ namespace App\Http\Controllers;
 
 use App\Models\Lesson;
 use App\Models\Module;
+use App\Models\VideoEncryptionKey;
+use App\Services\HlsService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Storage;
+use Illuminate\Support\Facades\URL;
 use Symfony\Component\HttpFoundation\StreamedResponse;
 use Symfony\Component\HttpFoundation\Response;
 
@@ -151,6 +154,134 @@ class VideoStreamController extends Controller
     }
 
     /**
+     * Serve the HLS master playlist with injected key URLs.
+     */
+    public function playlist(Request $request, string $type, int $id, HlsService $hlsService)
+    {
+        // Validate type
+        if (!in_array($type, ['lesson', 'module'])) {
+            abort(404, 'Invalid video type.');
+        }
+
+        // Get the model
+        $model = $this->getModel($type, $id);
+        
+        if (!$model || !$model->hls_path) {
+            abort(404, 'HLS playlist not found.');
+        }
+
+        // Check enrollment
+        $course = $type === 'lesson' ? $model->module->course : $model->course;
+        if (!$this->userIsEnrolled($course)) {
+            abort(403, 'You must be enrolled in this course to view this video.');
+        }
+
+        // Generate signed key URL (short expiry)
+        $keyUrl = URL::temporarySignedRoute(
+            'video.key',
+            now()->addMinutes(5),
+            ['type' => $type, 'id' => $id]
+        );
+
+        // Get playlist content with key URL injected
+        $playlistContent = $hlsService->getPlaylistWithKeyUrl($model->hls_path, $keyUrl);
+
+        return response($playlistContent, 200, [
+            'Content-Type' => 'application/vnd.apple.mpegurl',
+            'Cache-Control' => 'no-store, no-cache, must-revalidate, max-age=0',
+            'Pragma' => 'no-cache',
+        ]);
+    }
+
+    /**
+     * Deliver the encryption key for HLS playback.
+     */
+    public function keyDelivery(Request $request, string $type, int $id)
+    {
+        // Validate type
+        if (!in_array($type, ['lesson', 'module'])) {
+            abort(404, 'Invalid video type.');
+        }
+
+        // Get the model
+        $model = $this->getModel($type, $id);
+        
+        if (!$model || !$model->hls_key_id) {
+            abort(404, 'Encryption key not found.');
+        }
+
+        // Check enrollment
+        $course = $type === 'lesson' ? $model->module->course : $model->course;
+        if (!$this->userIsEnrolled($course)) {
+            abort(403, 'Unauthorized access to encryption key.');
+        }
+
+        // Get encryption key from database
+        $keyRecord = VideoEncryptionKey::find($model->hls_key_id);
+        
+        if (!$keyRecord) {
+            abort(404, 'Encryption key record not found.');
+        }
+
+        // Convert hex key back to binary
+        $keyBinary = hex2bin($keyRecord->encryption_key);
+
+        return response($keyBinary, 200, [
+            'Content-Type' => 'application/octet-stream',
+            'Cache-Control' => 'no-store, no-cache, must-revalidate, max-age=0',
+            'Pragma' => 'no-cache',
+        ]);
+    }
+
+    /**
+     * Stream an HLS segment.
+     */
+    public function segment(Request $request, string $type, int $id, string $segment)
+    {
+        // Validate type
+        if (!in_array($type, ['lesson', 'module'])) {
+            abort(404, 'Invalid video type.');
+        }
+
+        // Validate segment filename (prevent directory traversal)
+        if (!preg_match('/^segment_\d{3}\.ts$/', $segment)) {
+            abort(404, 'Invalid segment name.');
+        }
+
+        // Get the model
+        $model = $this->getModel($type, $id);
+        
+        if (!$model || !$model->hls_path) {
+            abort(404, 'Video not found.');
+        }
+
+        // Check enrollment
+        $course = $type === 'lesson' ? $model->module->course : $model->course;
+        if (!$this->userIsEnrolled($course)) {
+            abort(403, 'Unauthorized access to video segment.');
+        }
+
+        // Get segment path
+        $segmentPath = dirname($model->hls_path) . '/' . $segment;
+        $disk = Storage::disk(config('video.storage_disk', 'local'));
+        
+        if (!$disk->exists($segmentPath)) {
+            abort(404, 'Segment not found.');
+        }
+
+        // Stream the encrypted segment
+        return response()->stream(function () use ($disk, $segmentPath) {
+            $stream = $disk->readStream($segmentPath);
+            fpassthru($stream);
+            fclose($stream);
+        }, 200, [
+            'Content-Type' => 'video/MP2T',
+            'Cache-Control' => 'no-store, no-cache, must-revalidate, max-age=0',
+            'Pragma' => 'no-cache',
+        ]);
+    }
+
+    /**
      * Check if the current user is enrolled in the course.
      */
     protected function userIsEnrolled($course): bool
@@ -169,4 +300,5 @@ class VideoStreamController extends Controller
         return $user->enrollments()->where('course_id', $course->id)->exists();
     }
 }
+
 

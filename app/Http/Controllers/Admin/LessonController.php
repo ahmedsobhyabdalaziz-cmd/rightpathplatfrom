@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Admin;
 use App\Http\Controllers\Controller;
 use App\Models\Module;
 use App\Models\Lesson;
+use App\Jobs\ConvertToHls;
 use Illuminate\Http\Request;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\JsonResponse;
@@ -81,11 +82,16 @@ class LessonController extends Controller
             $validated['attachments'] = $attachments;
         }
 
-        $module->lessons()->create($validated);
+        $lesson = $module->lessons()->create($validated);
+
+        // Dispatch HLS conversion job for uploaded videos
+        if ($request->hasFile('video_file') && $validated['video_type'] === 'upload') {
+            ConvertToHls::dispatch('lesson', $lesson->id, $validated['video_path']);
+        }
 
         return redirect()
             ->route('admin.courses.show', $module->course)
-            ->with('success', 'Lesson created successfully.');
+            ->with('success', 'Lesson created successfully. Video conversion to HLS format will begin shortly.');
     }
 
     /**
@@ -140,15 +146,24 @@ class LessonController extends Controller
             $validated['video_url'] = null;
         }
 
+        $newVideoUploaded = false;
+
         // Handle new video upload (store in private storage for protection)
         if ($request->hasFile('video_file')) {
-            // Delete old video if exists
+            // Delete old video and HLS files if exists
             if ($lesson->video_path) {
                 Storage::disk($storageDisk)->delete($lesson->video_path);
             }
+            if ($lesson->hls_path) {
+                app(\App\Services\HlsService::class)->deleteHls($lesson->hls_path);
+            }
+            
             $validated['video_path'] = $request->file('video_file')->store('videos/lessons', $storageDisk);
             $validated['video_type'] = 'upload';
             $validated['video_url'] = null;
+            $validated['hls_path'] = null;
+            $validated['hls_key_id'] = null;
+            $newVideoUploaded = true;
         } elseif ($validated['video_type'] !== 'upload' && !$request->boolean('remove_video')) {
             // If switching from upload to another type, keep video_path as is unless explicitly removing
             if ($validated['video_type'] !== 'none' && $lesson->video_type === 'upload') {
@@ -195,9 +210,14 @@ class LessonController extends Controller
 
         $lesson->update($validated);
 
+        // Dispatch HLS conversion job for newly uploaded videos
+        if ($newVideoUploaded) {
+            ConvertToHls::dispatch('lesson', $lesson->id, $validated['video_path']);
+        }
+
         return redirect()
             ->route('admin.courses.show', $lesson->module->course)
-            ->with('success', 'Lesson updated successfully.');
+            ->with('success', 'Lesson updated successfully.' . ($newVideoUploaded ? ' Video conversion to HLS format will begin shortly.' : ''));
     }
 
     /**
