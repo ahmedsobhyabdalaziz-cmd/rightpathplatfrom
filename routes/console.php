@@ -11,6 +11,13 @@ Artisan::command('inspire', function () {
 // Cleanup expired password reset tokens daily
 Schedule::command('auth:clear-resets')->daily();
 
+// Process video conversion queue every minute
+// This allows videos to be processed automatically via cron job
+Schedule::command('queue:work --stop-when-empty --max-time=50')
+    ->everyMinute()
+    ->withoutOverlapping()
+    ->runInBackground();
+
 
 
 
