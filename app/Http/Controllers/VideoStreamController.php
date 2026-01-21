@@ -176,12 +176,8 @@ class VideoStreamController extends Controller
             abort(403, 'You must be enrolled in this course to view this video.');
         }
 
-        // Generate signed key URL (short expiry)
-        $keyUrl = URL::temporarySignedRoute(
-            'video.key',
-            now()->addMinutes(5),
-            ['type' => $type, 'id' => $id]
-        );
+        // Generate key URL (authentication-based)
+        $keyUrl = route('video.key', ['type' => $type, 'id' => $id]);
 
         // Get playlist content with key URL injected
         $playlistContent = $hlsService->getPlaylistWithKeyUrl($model->hls_path, $keyUrl);

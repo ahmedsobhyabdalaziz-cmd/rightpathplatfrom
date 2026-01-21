@@ -104,15 +104,15 @@ Route::get('/video/stream/{type}/{id}', [VideoStreamController::class, 'stream']
 // HLS video streaming
 Route::get('/video/hls/{type}/{id}/playlist.m3u8', [VideoStreamController::class, 'playlist'])
     ->name('video.playlist')
-    ->middleware(['auth', 'signed']);
+    ->middleware(['auth']);
 
 Route::get('/video/hls/{type}/{id}/key', [VideoStreamController::class, 'keyDelivery'])
     ->name('video.key')
-    ->middleware(['auth', 'signed']);
+    ->middleware(['auth']);
 
 Route::get('/video/hls/{type}/{id}/{segment}', [VideoStreamController::class, 'segment'])
     ->name('video.segment')
-    ->middleware(['auth', 'signed']);
+    ->middleware(['auth']);
 
 
 

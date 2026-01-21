@@ -288,7 +288,7 @@
                     }
                 });
                 
-                const playlistUrl = '{{ URL::temporarySignedRoute("video.playlist", now()->addMinutes(15), ["type" => "lesson", "id" => $lesson->id]) }}';
+                const playlistUrl = '{{ route("video.playlist", ["type" => "lesson", "id" => $lesson->id]) }}';
                 console.log('Loading HLS playlist:', playlistUrl);
                 
                 hls.loadSource(playlistUrl);
@@ -329,7 +329,7 @@
                 });
             } else if (video && video.canPlayType('application/vnd.apple.mpegurl')) {
                 // Native HLS support (Safari)
-                const playlistUrl = '{{ URL::temporarySignedRoute("video.playlist", now()->addMinutes(15), ["type" => "lesson", "id" => $lesson->id]) }}';
+                const playlistUrl = '{{ route("video.playlist", ["type" => "lesson", "id" => $lesson->id]) }}';
                 console.log('Using native HLS support');
                 video.src = playlistUrl;
                 
